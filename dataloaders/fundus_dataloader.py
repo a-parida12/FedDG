@@ -15,14 +15,17 @@ from scipy.ndimage.morphology import distance_transform_edt, binary_erosion,\
 class Dataset(Dataset):
     """ LA Dataset """
     def __init__(self, client_idx=None, freq_site_idx=None, split='train', transform=None):
+        data_dir = "/media/abhijeet/Data/Retinal/Extract/Data_FEDDG"
         self.transform = transform
-        self.client_name = ['client1', 'client2', 'client3', 'client4']
+        self.client_name = ['client1', 'client2', 'client3', 'client4', 'client5']
         self.freq_list_clients = []
         if split=='train':
-            self.image_list = glob('xxx/dataset/{}/data_npy/*'.format(self.client_name[client_idx]))
+            print(f"client {client_idx} training")
+            print(f'{data_dir}/dataset_{split}/{self.client_name[client_idx]}/data_npy/*')
+            self.image_list = glob(f'{data_dir}/dataset_{split}/{self.client_name[client_idx]}/data_npy/*')
 
             for i in range(len(self.client_name)):
-                freq_list = glob('xxx/dataset/{}/freq_amp_npy/*'.format(self.client_name[i]))
+                freq_list = glob(f'{data_dir}/dataset_{split}/{self.client_name[i]}/freq_amp_npy/*')
                 length = len(freq_list)
                 freq_list = random.sample(freq_list, int(length/8))
                 self.freq_list_clients.append(freq_list)
@@ -40,14 +43,14 @@ class Dataset(Dataset):
         mask_patches = []
 
         raw_inp = np.load(raw_file)
-        image_patch = raw_inp[..., 0:3]
+        image_patch = raw_inp[..., :3]
         mask_patch = raw_inp[..., 3:]
         image_patches = image_patch.copy()
 
         # image_patches = 
         # print (image_patch.dtype)
         # print (mask_patch.dtype)
-        disc_contour, disc_bg, cup_contour, cup_bg = _get_coutour_sample(mask_patch)
+        disc_contour, disc_bg = _get_coutour_sample(mask_patch)
         # print ('raw', np.min(image_patch), np.max(image_patch))
         for tar_freq_domain in np.random.choice(self.freq_site_index, 2):
             tar_freq = np.random.choice(self.freq_list_clients[tar_freq_domain])
@@ -63,7 +66,7 @@ class Dataset(Dataset):
         # contour_bg_mask = np.concatenate(contour_bg_mask, axis=-1)
 
         sample = {"image": image_patches.astype(np.float32), "label": mask_patches.astype(np.float32), 
-        "disc_contour":disc_contour, "disc_bg":disc_bg, "cup_contour":cup_contour, "cup_bg":cup_bg}
+        "disc_contour":disc_contour, "disc_bg":disc_bg}
         
         return sample
 
@@ -74,14 +77,14 @@ def _get_coutour_sample(y_true):
     disc_dilation = ndimage.binary_dilation(disc_mask[..., 0], iterations=5).astype(disc_mask.dtype)
     disc_contour = np.expand_dims(disc_mask[..., 0] - disc_erosion, axis = 2)
     disc_bg = np.expand_dims(disc_dilation - disc_mask[..., 0], axis = 2)
-    cup_mask = np.expand_dims(y_true[..., 1], axis=2)
+    #cup_mask = np.expand_dims(y_true[..., 1], axis=2)
 
-    cup_erosion = ndimage.binary_erosion(cup_mask[..., 0], iterations=1).astype(cup_mask.dtype)
-    cup_dilation = ndimage.binary_dilation(cup_mask[..., 0], iterations=5).astype(cup_mask.dtype)
-    cup_contour = np.expand_dims(cup_mask[..., 0] - cup_erosion, axis = 2)
-    cup_bg = np.expand_dims(cup_dilation - cup_mask[..., 0], axis = 2)
+    # cup_erosion = ndimage.binary_erosion(cup_mask[..., 0], iterations=1).astype(cup_mask.dtype)
+    # cup_dilation = ndimage.binary_dilation(cup_mask[..., 0], iterations=5).astype(cup_mask.dtype)
+    # cup_contour = np.expand_dims(cup_mask[..., 0] - cup_erosion, axis = 2)
+    # cup_bg = np.expand_dims(cup_dilation - cup_mask[..., 0], axis = 2)
 
-    return [disc_contour.transpose(2, 0, 1), disc_bg.transpose(2, 0, 1), cup_contour.transpose(2, 0, 1), cup_bg.transpose(2, 0, 1)]
+    return [disc_contour.transpose(2, 0, 1), disc_bg.transpose(2, 0, 1)]
 
 class CenterCrop(object):
     def __init__(self, output_size):
@@ -266,8 +269,8 @@ def low_freq_mutate_np( amp_src, amp_trg, L=0.1 ):
 
     ratio = random.randint(1,10)/10
 
-    a_src[:,h1:h2,w1:w2] = a_trg[:,h1:h2,w1:w2]
-    # a_src[:,h1:h2,w1:w2] = a_src[:,h1:h2,w1:w2] * ratio + a_trg[:,h1:h2,w1:w2] * (1- ratio)
+    #a_src[:,h1:h2,w1:w2] = a_trg[:,h1:h2,w1:w2]
+    a_src[:,h1:h2,w1:w2] = a_src[:,h1:h2,w1:w2] * ratio + a_trg[:,h1:h2,w1:w2] * (1- ratio)
     # a_src[:,h1:h2,w1:w2] = a_trg[:,h1:h2,w1:w2]
     a_src = np.fft.ifftshift( a_src, axes=(-2, -1) )
     # a_trg[:,h1:h2,w1:w2] = a_src[:,h1:h2,w1:w2]

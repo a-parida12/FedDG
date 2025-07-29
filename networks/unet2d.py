@@ -126,7 +126,7 @@ class ConvU(nn.Module):
         return y
 
 
-class Unet2D(nn.Module):
+class Unet2D_o(nn.Module):
     def __init__(self, c=3, n=16, norm='in', num_classes=2):
         super(Unet2D, self).__init__()
 
@@ -183,4 +183,29 @@ class Unet2D(nn.Module):
         # pred_compact = torch.argmax(predictions, dim=1) # shape [batch, w, h]
 
         return predictions, predictions, y1
+import monai
 
+class Unet2D(nn.Module):
+    def __init__(self, num_classes=2):
+
+        self.model = monai.networks.nets.UNet(
+            spatial_dims=2,
+            in_channels=3,
+            out_channels=num_classes,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+        )
+
+    def forward(self, x, weights=None):
+        if weights is not None:
+            # keep all conv weights
+            import pdb; pdb.set_trace()
+            pass
+
+        y1_pred = self.model(x)
+
+        predictions = F.sigmoid(input=y1_pred)
+        # pred_compact = torch.argmax(predictions, dim=1) # shape [batch, w, h]
+
+        return predictions, predictions, y1_pred

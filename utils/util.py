@@ -11,14 +11,12 @@ import logging
 import numpy as np
 import torch
 from torch.utils.data.sampler import Sampler
-import SimpleITK as sitk
 from scipy.ndimage import _ni_support
 from medpy import metric
 from scipy.ndimage.morphology import distance_transform_edt, binary_erosion,generate_binary_structure
 from scipy import ndimage
 import scipy
-import networks
-from medpy import metric
+#from medpy import metric
 def load_model(path):
     """Loads model and return it without DataParallel table."""
     if os.path.isfile(path):

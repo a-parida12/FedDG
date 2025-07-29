@@ -1,7 +1,7 @@
 import os
 import sys
 from tqdm import tqdm
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import shutil
 import argparse
 import logging
@@ -55,22 +55,22 @@ client_num = args.client_num
 max_epoch = args.max_epoch
 display_freq = args.display_freq
 
-client_name = ['client1', 'client2', 'client3', 'client4'
+client_name = ['client1', 'client2', 'client3', 'client4', 'client5']
 client_data_list = []
 for client_idx in range(client_num):
     client_data_list.append(glob('/research/pheng4/qdliu/dataset/Fundus/{}/processed/npy/*'.format(client_name[client_idx])))
     print (len(client_data_list[client_idx]))
-slice_num = np.array([101, 159, 400, 400])
-volume_size = [384, 384, 3]
-unseen_site_idx = args.unseen_site
-source_site_idx = [0, 1, 2, 3]
-source_site_idx.remove(unseen_site_idx)
+slice_num = np.array([1, 1, 1, 1, 1]) # number of slices for each client
+volume_size = [256, 256, 3]
+#unseen_site_idx = args.unseen_site
+source_site_idx = [0, 1, 2, 3, 4]
+#source_site_idx.remove(unseen_site_idx)
 client_weight = slice_num[source_site_idx] / np.sum(slice_num[source_site_idx])
 client_weight = np.round(client_weight, decimals=2)
 client_weight[-1] = 1 - np.sum(client_weight[:2])
-client_weight = np.insert(client_weight, unseen_site_idx, 0)
+#client_weight = np.insert(client_weight, unseen_site_idx, 0)
 print(client_weight)
-num_classes = 3
+num_classes = 1
 
 if args.deterministic:
     cudnn.benchmark = False
@@ -162,10 +162,10 @@ if __name__ == "__main__":
     dataloader_clients = []
     net_clients = []
     optimizer_clients = []
+    print ("client num is ", client_num)
     for client_idx in range(client_num):
         freq_site_idx = source_site_idx.copy()
-        if client_idx != unseen_site_idx:
-            freq_site_idx.remove(client_idx)
+
         dataset = Dataset(client_idx=client_idx, freq_site_idx=freq_site_idx,
                                 split='train', transform = transforms.Compose([
                                 ToTensor(),
@@ -200,8 +200,8 @@ if __name__ == "__main__":
                 time2 = time.time()
 
                 # obtain training data
-                volume_batch, label_batch, disc_contour, disc_bg, cup_contour, cup_bg = sampled_batch['image'], sampled_batch['label'], \
-                sampled_batch['disc_contour'], sampled_batch['disc_bg'], sampled_batch['cup_contour'], sampled_batch['cup_bg']
+                volume_batch, label_batch, disc_contour, disc_bg = sampled_batch['image'], sampled_batch['label'], \
+                sampled_batch['disc_contour'], sampled_batch['disc_bg']
                 # volume_batch_raw = volume_batch[:, :3, ...]
                 # volume_batch_trs_1 = volume_batch[:, 3:6, ...]
                 # volume_batch_trs_2 = volume_batch[:, 6:, ...]
@@ -290,13 +290,13 @@ if __name__ == "__main__":
         update_global_model(net_clients, client_weight)
 
         ## evaluation
-        with open(os.path.join(snapshot_path, 'evaluation_result.txt'), 'a') as f:
-            dice_list = []
-            haus_list = []
-            print("epoch {} testing , site {}".format(epoch_num, unseen_site_idx), file=f)
-            dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
-            print(("   OD dice is: {}, std is {}".format(dice[0], np.std(dice_array[:, 0]))), file=f)
-            print(("   OC dice is: {}, std is {}".format(dice[1], np.std(dice_array[:, 1]))), file=f)
+        # with open(os.path.join(snapshot_path, 'evaluation_result.txt'), 'a') as f:
+        #     dice_list = []
+        #     haus_list = []
+        #     print("epoch {} testing , site {}".format(epoch_num, unseen_site_idx), file=f)
+        #     dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
+        #     print(("   OD dice is: {}, std is {}".format(dice[0], np.std(dice_array[:, 0]))), file=f)
+        #     print(("   OC dice is: {}, std is {}".format(dice[1], np.std(dice_array[:, 1]))), file=f)
             
         ## save model
         save_mode_path = os.path.join(snapshot_path + '/model', 'epoch_' + str(epoch_num) + '.pth')
