@@ -56,15 +56,14 @@ class Dataset(Dataset):
             tar_freq = np.random.choice(self.freq_list_clients[tar_freq_domain])
             tar_freq = np.load(tar_freq)
             # L1 = random.randint(2,5)/1000.0
-            image_patch_freq_1 = source_to_target_freq(image_patch, tar_freq[...], L=0)
+            image_patch_freq_1 = source_to_target_freq(image_patch, tar_freq, L=0)
+            #print(image_patch_freq_1.shape, image_patch.shape)
             image_patch_freq_1 = np.clip(image_patch_freq_1, 0, 255)
-            # print (image_patch_freq_1.dtype)
             # print ('trans', np.min(image_patch_freq_1), np.max(image_patch_freq_1))
             image_patches = np.concatenate([image_patches,image_patch_freq_1], axis=-1)
         image_patches = image_patches.transpose(2, 0, 1)
         mask_patches = mask_patch.transpose(2, 0, 1)
         # contour_bg_mask = np.concatenate(contour_bg_mask, axis=-1)
-
         sample = {"image": image_patches.astype(np.float32), "label": mask_patches.astype(np.float32), 
         "disc_contour":disc_contour, "disc_bg":disc_bg}
         
@@ -261,14 +260,14 @@ def low_freq_mutate_np( amp_src, amp_trg, L=0.1 ):
     b = (  np.floor(np.amin((h,w))*L)  ).astype(int)
     c_h = np.floor(h/2.0).astype(int)
     c_w = np.floor(w/2.0).astype(int)
-    # print (b)
+    #print (b)
     h1 = c_h-b
     h2 = c_h+b+1
     w1 = c_w-b
     w2 = c_w+b+1
 
     ratio = random.randint(1,10)/10
-
+    #import pdb; pdb.set_trace()
     #a_src[:,h1:h2,w1:w2] = a_trg[:,h1:h2,w1:w2]
     a_src[:,h1:h2,w1:w2] = a_src[:,h1:h2,w1:w2] * ratio + a_trg[:,h1:h2,w1:w2] * (1- ratio)
     # a_src[:,h1:h2,w1:w2] = a_trg[:,h1:h2,w1:w2]
@@ -280,7 +279,8 @@ def low_freq_mutate_np( amp_src, amp_trg, L=0.1 ):
 def source_to_target_freq( src_img, amp_trg, L=0.1 ):
     # exchange magnitude
     # input: src_img, trg_img
-    src_img = src_img.transpose((2, 0, 1))
+    #print(src_img.shape, amp_trg.shape)
+    #src_img = src_img.transpose((2, 0, 1))
     src_img_np = src_img #.cpu().numpy()
     fft_src_np = np.fft.fft2( src_img_np, axes=(-2, -1) )
 
@@ -289,13 +289,14 @@ def source_to_target_freq( src_img, amp_trg, L=0.1 ):
 
     # mutate the amplitude part of source with target
     amp_src_ = low_freq_mutate_np( amp_src, amp_trg, L=L )
-
+    
     # mutated fft of source
     fft_src_ = amp_src_ * np.exp( 1j * pha_src )
 
     # get the mutated image
     src_in_trg = np.fft.ifft2( fft_src_, axes=(-2, -1) )
+    
+    
     src_in_trg = np.real(src_in_trg)
-
-    return src_in_trg.transpose(1, 2, 0)
+    return src_in_trg
 

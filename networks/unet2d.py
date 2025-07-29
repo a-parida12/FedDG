@@ -188,6 +188,7 @@ import monai
 class Unet2D(nn.Module):
     def __init__(self, num_classes=2):
 
+        super(Unet2D, self).__init__()
         self.model = monai.networks.nets.UNet(
             spatial_dims=2,
             in_channels=3,
