@@ -26,12 +26,12 @@ from networks.unet2d import Unet2D
 from utils.losses import dice_loss
 from utils.util import _eval_dice, _eval_haus, _connectivity_region_analysis, parse_fn_haus
 from dataloaders.fundus_dataloader import Dataset, ToTensor
-
+torch.autograd.set_detect_anomaly(True)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp', type=str,  default='xxxx', help='model_name')
-parser.add_argument('--max_epoch', type=int,  default=100, help='maximum epoch number to train')
-parser.add_argument('--client_num', type=int, default=4, help='batch_size per gpu')
+parser.add_argument('--max_epoch', type=int,  default=10, help='maximum epoch number to train')
+parser.add_argument('--client_num', type=int, default=5, help='batch_size per gpu')
 parser.add_argument('--batch_size', type=int, default=5, help='batch_size per gpu')
 parser.add_argument('--clip_value', type=float,  default=100, help='maximum epoch number to train')
 parser.add_argument('--meta_step_size', type=float,  default=1e-3, help='maximum epoch number to train')
@@ -41,7 +41,7 @@ parser.add_argument('--seed', type=int,  default=1337, help='random seed')
 parser.add_argument('--gpu', type=str,  default='0', help='GPU to use')
 parser.add_argument('--display_freq', type=int, default=5, help='batch_size per gpu')
 
-parser.add_argument('--unseen_site', type=int, default=0, help='batch_size per gpu')
+#parser.add_argument('--unseen_site', type=int, default=0, help='batch_size per gpu')
 args = parser.parse_args()
 
 snapshot_path = "../output/" + args.exp + "/"
@@ -56,18 +56,19 @@ max_epoch = args.max_epoch
 display_freq = args.display_freq
 
 client_name = ['client1', 'client2', 'client3', 'client4', 'client5']
-client_data_list = []
-for client_idx in range(client_num):
-    client_data_list.append(glob('/research/pheng4/qdliu/dataset/Fundus/{}/processed/npy/*'.format(client_name[client_idx])))
-    print (len(client_data_list[client_idx]))
+# client_data_list = []
+# for client_idx in range(client_num):
+#     #client_data_list.append(glob('/research/pheng4/qdliu/dataset/Fundus/{}/processed/npy/*'.format(client_name[client_idx])))
+#     print (len(client_data_list[client_idx]))
 slice_num = np.array([1, 1, 1, 1, 1]) # number of slices for each client
 volume_size = [256, 256, 3]
 #unseen_site_idx = args.unseen_site
 source_site_idx = [0, 1, 2, 3, 4]
+local_epochs = [36, 36, 36, 36, 12]
 #source_site_idx.remove(unseen_site_idx)
-client_weight = slice_num[source_site_idx] / np.sum(slice_num[source_site_idx])
-client_weight = np.round(client_weight, decimals=2)
-client_weight[-1] = 1 - np.sum(client_weight[:2])
+client_weight = len(source_site_idx)*[1]
+# client_weight = np.round(client_weight, decimals=2)
+# client_weight[-1] = 1 - np.sum(client_weight[:2])
 #client_weight = np.insert(client_weight, unseen_site_idx, 0)
 print(client_weight)
 num_classes = 1
@@ -83,9 +84,10 @@ if args.deterministic:
 def update_global_model(net_clients, client_weight):
     # Use the true average until the exponential average is more correct
     for param in zip(net_clients[0].parameters(), net_clients[1].parameters(), net_clients[2].parameters(), \
-        net_clients[3].parameters()):
+        net_clients[3].parameters(), net_clients[4].parameters()):
 
         new_para = Variable(torch.Tensor(np.zeros(param[0].shape)), requires_grad=False).cuda() 
+
         for i in range(client_num):
             new_para.data.add_(client_weight[i], param[i].data)
 
@@ -178,8 +180,6 @@ if __name__ == "__main__":
         net_clients.append(net)
         optimizer_clients.append(optimizer)
 
-    for name, param in  net_clients[0].named_parameters():
-        print (name)
 
     temperature = 0.05
     cont_loss_func = losses.NTXentLoss(temperature)
@@ -195,95 +195,84 @@ if __name__ == "__main__":
             optimizer_current = optimizer_clients[client_idx]
             time1 = time.time()
             iter_num = 0
+            local_epoch = local_epochs[client_idx]
+            
+            for _ in range(local_epoch):
+                for i_batch, sampled_batch in enumerate(dataloader_current):
+                    time2 = time.time()
 
-            for i_batch, sampled_batch in enumerate(dataloader_current):
-                time2 = time.time()
+                    # obtain training data
+                    volume_batch, label_batch, disc_contour, disc_bg = sampled_batch['image'], sampled_batch['label'], \
+                    sampled_batch['disc_contour'], sampled_batch['disc_bg']
+                    volume_batch_raw_np = volume_batch[:, :3, ...]
+                    volume_batch_trs_1_np = volume_batch[:, 3:6, ...]
+                    volume_batch_raw, volume_batch_trs_1, label_batch = \
+                        volume_batch_raw_np.cuda(), volume_batch_trs_1_np.cuda(), label_batch.cuda()
+                    disc_contour, disc_bg = disc_contour.cuda(), disc_bg.cuda()
 
-                # obtain training data
-                volume_batch, label_batch, disc_contour, disc_bg = sampled_batch['image'], sampled_batch['label'], \
-                sampled_batch['disc_contour'], sampled_batch['disc_bg']
-                # volume_batch_raw = volume_batch[:, :3, ...]
-                # volume_batch_trs_1 = volume_batch[:, 3:6, ...]
-                # volume_batch_trs_2 = volume_batch[:, 6:, ...]
-                # volume_batch_raw, volume_batch_trs_1, volume_batch_trs_2, label_batch = \
-                #     volume_batch_raw.cuda(), volume_batch_trs_1.cuda(), volume_batch_trs_2.cuda(), label_batch.cuda()
-                volume_batch_raw_np = volume_batch[:, :3, ...]
-                volume_batch_trs_1_np = volume_batch[:, 3:6, ...]
-                volume_batch_raw, volume_batch_trs_1, label_batch = \
-                    volume_batch_raw_np.cuda(), volume_batch_trs_1_np.cuda(), label_batch.cuda()
-                disc_contour, disc_bg, cup_contour, cup_bg = disc_contour.cuda(), disc_bg.cuda(), cup_contour.cuda(), cup_bg.cuda()
+                    # obtain updated parameter at inner loop
+                    outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
+                    loss_inner = dice_loss(outputs_soft_inner, label_batch)
+                    grads = torch.autograd.grad(loss_inner, net_current.parameters(), retain_graph=True)
 
-                # obtain updated parameter at inner loop
-                outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
-                loss_inner = dice_loss(outputs_soft_inner, label_batch)
-                grads = torch.autograd.grad(loss_inner, net_current.parameters(), retain_graph=True)
+                    fast_weights = OrderedDict(
+        (name, param - torch.mul(meta_step_size, torch.clamp(grad, 0 - clip_value, clip_value)).detach().clone())
+        for ((name, param), grad) in zip(net_current.named_parameters(), grads)
+    )
 
-                fast_weights = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
-                                                  ((name, param), grad) in
-                                                  zip(net_current.named_parameters(), grads))
+                    # outer loop evaluation
+                    outputs_soft_outer_1, outputs_mask_outer_1, embedding_outer = net_current(volume_batch_trs_1, fast_weights) #alpha
+                    loss_outer_1_dice = dice_loss(outputs_soft_outer_1, label_batch)
 
-                # outer loop evaluation
-                outputs_soft_outer_1, outputs_mask_outer_1, embedding_outer = net_current(volume_batch_trs_1, fast_weights) #alpha
-                loss_outer_1_dice = dice_loss(outputs_soft_outer_1, label_batch)
+                    inner_disc_ct_em, inner_disc_bg_em = \
+                        extract_contour_embedding([disc_contour, disc_bg], embedding_inner)
+                    outer_disc_ct_em, outer_disc_bg_em = \
+                        extract_contour_embedding([disc_contour, disc_bg], embedding_outer)
 
-                inner_disc_ct_em, inner_disc_bg_em, inner_cup_ct_em, inner_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], embedding_inner)
-                outer_disc_ct_em, outer_disc_bg_em, outer_cup_ct_em, outer_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], embedding_outer)
+                    disc_ct_em = torch.cat((inner_disc_ct_em, outer_disc_ct_em), 0)
+                    disc_bg_em = torch.cat((inner_disc_bg_em, outer_disc_bg_em), 0)
+    
+                    disc_em = torch.cat((disc_ct_em, disc_bg_em), 0)
+                    label = np.concatenate([np.ones(disc_ct_em.shape[0]), np.zeros(disc_bg_em.shape[0])])
+                    label = torch.from_numpy(label)
 
-                disc_ct_em = torch.cat((inner_disc_ct_em, outer_disc_ct_em), 0)
-                disc_bg_em = torch.cat((inner_disc_bg_em, outer_disc_bg_em), 0)
-                cup_ct_em = torch.cat((inner_cup_ct_em, outer_cup_ct_em), 0)
-                cup_bg_em = torch.cat((inner_cup_bg_em, outer_cup_bg_em), 0)
-                disc_em = torch.cat((disc_ct_em, disc_bg_em), 0)
-                cup_em = torch.cat((cup_ct_em, cup_bg_em), 0)
-                label = np.concatenate([np.ones(disc_ct_em.shape[0]), np.zeros(disc_bg_em.shape[0])])
-                label = torch.from_numpy(label)
+                    disc_cont_loss = cont_loss_func(disc_em, label)
+                    cont_loss = disc_cont_loss
+                    loss_outer = loss_outer_1_dice + cont_loss * 0.1
 
-                disc_cont_loss = cont_loss_func(disc_em, label)
-                cup_cont_loss = cont_loss_func(cup_em, label)
-                cont_loss = disc_cont_loss + cup_cont_loss
-                loss_outer = loss_outer_1_dice + cont_loss * 0.1
+                    total_loss = loss_inner + loss_outer 
 
-                total_loss = loss_inner + loss_outer 
+                    optimizer_current.zero_grad()
+                    total_loss.backward()
+                    optimizer_current.step()
 
-                optimizer_current.zero_grad()
-                total_loss.backward()
-                optimizer_current.step()
+                    iter_num = iter_num + 1
+                    if iter_num % display_freq == 0:
+                        writer.add_scalar('lr', lr_, iter_num)
+                        writer.add_scalar('loss/inner', loss_inner, iter_num)
+                        writer.add_scalar('loss/outer', loss_outer, iter_num)
+                        writer.add_scalar('loss/total', total_loss, iter_num)
+                        logging.info('Epoch: [%d] client [%d] iteration [%d / %d] : inner loss : %f outer dice loss : %f outer cont loss : %f outer loss : %f total loss : %f' % \
+                            (epoch_num, client_idx, iter_num, len(dataloader_current), loss_inner.item(), loss_outer_1_dice.item(), cont_loss.item(), loss_outer.item(), total_loss.item()))
 
-                iter_num = iter_num + 1
-                if iter_num % display_freq == 0:
-                    writer.add_scalar('lr', lr_, iter_num)
-                    writer.add_scalar('loss/inner', loss_inner, iter_num)
-                    writer.add_scalar('loss/outer', loss_outer, iter_num)
-                    writer.add_scalar('loss/total', total_loss, iter_num)
-                    logging.info('Epoch: [%d] client [%d] iteration [%d / %d] : inner loss : %f outer dice loss : %f outer cont loss : %f outer loss : %f total loss : %f' % \
-                        (epoch_num, client_idx, iter_num, len(dataloader_current), loss_inner.item(), loss_outer_1_dice.item(), cont_loss.item(), loss_outer.item(), total_loss.item()))
+                    if iter_num % 20 == 0:
+                        image = np.array(volume_batch_raw_np[0, 0:3, :, :], dtype='uint8')
+                        writer.add_image('train/RawImage', image, iter_num)
 
-                if iter_num % 20 == 0:
-                    image = np.array(volume_batch_raw_np[0, 0:3, :, :], dtype='uint8')
-                    writer.add_image('train/RawImage', image, iter_num)
+                        image = np.array(volume_batch_trs_1_np[0, 0:3, :, :], dtype='uint8')
+                        writer.add_image('train/TrsImage', image, iter_num)
 
-                    image = np.array(volume_batch_trs_1_np[0, 0:3, :, :], dtype='uint8')
-                    writer.add_image('train/TrsImage', image, iter_num)
-
-                    image = outputs_soft_inner[0, 0:1, ...].data.cpu().numpy()
-                    writer.add_image('train/RawDiskMask', image, iter_num)
-                    image = outputs_soft_inner[0, 1:, ...].data.cpu().numpy()
-                    writer.add_image('train/RawCupMask', image, iter_num)
+                        image = outputs_soft_inner[0, 0:1, ...].data.cpu().numpy()
+                        writer.add_image('train/RawDiskMask', image, iter_num)
+                        image = outputs_soft_inner[0, 1:, ...].data.cpu().numpy()
+                        writer.add_image('train/RawCupMask', image, iter_num)
 
 
-                    image = np.array(disc_contour[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    writer.add_image('train/disc_contour', image, iter_num)
+                        image = np.array(disc_contour[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
+                        writer.add_image('train/disc_contour', image, iter_num)
 
-                    image = np.array(disc_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    writer.add_image('train/disc_bg', image, iter_num)
-
-                    image = np.array(cup_contour[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    writer.add_image('train/cup_contour', image, iter_num)
-
-                    image = np.array(cup_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    writer.add_image('train/cup_bg', image, iter_num)
+                        image = np.array(disc_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
+                        writer.add_image('train/disc_bg', image, iter_num)
 
 
         ## model aggregation

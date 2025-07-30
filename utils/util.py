@@ -127,12 +127,11 @@ def _eval_dice(gt_y, pred_y, detail=False):
 
     class_map = {  # a map used for mapping label value to its name, used for output
         "0": "disk",
-        "1": "cup"
     }
 
     dice = []
 
-    for cls in range(0,2):
+    for cls in range(0,1):
 
         gt = gt_y[:, cls, ...]
         pred = pred_y[:, cls, ...]
@@ -221,7 +220,7 @@ def _eval_haus(pred_y, gt_y, detail=False):
     '''
     haus = []
 
-    for cls in range(0,2):
+    for cls in range(0,1):
 
         gt = gt_y[0, cls, ...]
         pred = pred_y[0, cls, ...]

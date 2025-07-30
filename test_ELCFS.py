@@ -10,13 +10,13 @@ import logging
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str, default='../data/2018LA_Seg_Training Set/', help='Name of Experiment')
-parser.add_argument('--model', type=str,  default='1030-meta-shape-site3', help='model_name')
+parser.add_argument('--model', type=str,  default='xxxx', help='model_name')
 parser.add_argument('--method', type=str,  default='epi_result', help='model_name')
 parser.add_argument('--batch_size', type=int,  default=4, help='model_name')
 parser.add_argument('--client_num', type=int,  default=4, help='model_name')
 parser.add_argument('--gpu', type=str,  default='0', help='GPU to use')
-parser.add_argument('--unseen_site', type=int,  default=3, help='GPU to use')
-parser.add_argument('--model_idx', type=int,  default=85, help='GPU to use')
+#parser.add_argument('--unseen_site', type=int,  default=3, help='GPU to use')
+parser.add_argument('--model_idx', type=int,  default=9, help='GPU to use')
 FLAGS = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu
@@ -27,19 +27,13 @@ snapshot_path = "../output/"+FLAGS.method+"/"
 #     os.makedirs(test_save_path)
 args = parser.parse_args()
 batch_size = args.batch_size * len(args.gpu.split(','))
-volume_size = [384, 384, 1]
+volume_size = [256, 256, 3]
 num_classes = 2
 client_num = args.client_num
 
-client_name = ['Site1', 'Site2', 'Site3', 'Site4']
+client_name = ['client1', 'client2', 'client3', 'client4', 'client5']
 
-client_data_list = []
-for client_idx in range(client_num):
-    client_data_list.append(glob('/research/pheng4/qdliu/dataset/Fundus/{}/processed/npy/*'.format(client_name[client_idx])))
-    print (len(client_data_list[client_idx]))
-
-unseen_site_idx = args.unseen_site
-source_site_idx = [0, 1, 2, 3]
+source_site_idx = [0, 1, 2, 3, 4]
 
 result_dir = snapshot_path + '/prediction/'
 if not os.path.exists(result_dir):
@@ -57,12 +51,12 @@ def test(site_index, test_net_idx):
     
     test_net = Unet2D()
     test_net = test_net.cuda()
-
+    data_dir = "/media/abhijeet/Data/Retinal/Extract/Data_FEDDG"
     save_mode_path = os.path.join(model_path + '/model', 'epoch_' + str(test_net_idx) + '.pth')
     test_net.load_state_dict(torch.load(save_mode_path))
     test_net.train()
-
-    test_data_list = client_data_list[site_index]
+    split = 'val'
+    test_data_list = glob(f'{data_dir}/dataset_{split}/{client_name[site_index]}/data_npy/*')
 
     dice_array = []
     haus_array = []
@@ -70,7 +64,7 @@ def test(site_index, test_net_idx):
     for fid, filename in enumerate(test_data_list):
         # if 'S-5-L' not in filename:
         #     continue
-        print(filename)
+        #print(filename)
         data = np.load(filename)
         image = data[..., :3]#np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = data[..., 3:]#np.expand_dims(data[..., 3:].transpose(2, 0, 1), axis=0)
@@ -107,17 +101,19 @@ def test(site_index, test_net_idx):
 
 if __name__ == '__main__':
     test_net_idx = args.model_idx
+    for unseen_site_idx in range(5):
+         
 
-    with open(os.path.join(snapshot_path, 'testing_result.txt'), 'a') as f:
-        # for test_net_idx in range(10,11):
+        with open(os.path.join(snapshot_path, f'testing_result_{client_name[unseen_site_idx]}.txt'), 'a') as f:
+            # for test_net_idx in range(10,11):
 
 
-            dice_list = []
-            haus_list = []
-            print("epoch {} testing ".format(test_net_idx))
-            dice, dice_array, haus, haus_array = test(unseen_site_idx, test_net_idx)
-            print(("   OD dice is: {}, std is {}, array is {}".format(dice[0], np.std(dice_array[:, 0]), dice_array[:, 0])), file=f)
-            print(("      {}".format(dice_array[:, 0])), file=f)
-            print(("   OC dice is: {}, std is {}, array is {}".format(dice[1], np.std(dice_array[:, 1]), dice_array[:, 1])), file=f)
-            print(("      {}".format(dice_array[:, 1])), file=f)
-            print ((dice[0]+dice[1])/2)
+                dice_list = []
+                haus_list = []
+                print("epoch {} testing ".format(test_net_idx))
+                dice, dice_array, haus, haus_array = test(unseen_site_idx, test_net_idx)
+                print(("   OD dice is: {}, std is {}, array is {}".format(dice[0], np.std(dice_array[:, 0]), dice_array[:, 0])), file=f)
+                print(("      {}".format(dice_array[:, 0])), file=f)
+                #print(("   OC dice is: {}, std is {}, array is {}".format(dice[1], np.std(dice_array[:, 1]), dice_array[:, 1])), file=f)
+                #print(("      {}".format(dice_array[:, 1])), file=f)
+                print ((dice[0]))
